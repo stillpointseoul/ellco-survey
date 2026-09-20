@@ -258,12 +258,8 @@ function QuestionCard({
   const [hovered, setHovered] = useState<number | null>(null);
   const displayScore = hovered ?? selected ?? null;
   const displayLevel = question.levels.find((l) => l.score === displayScore) ?? null;
-  const orderedLevels = question.levels; // already 5,4,3,2,1
-  const selectedPos = selected
-    ? orderedLevels.findIndex((l) => l.score === selected)
-    : -1;
-  const fillPct =
-    selectedPos >= 0 ? (selectedPos / (orderedLevels.length - 1)) * 100 : 0;
+  // question.levels is [5,4,3,2,1]; display left-to-right as 1 -> 5
+  const orderedLevels = [...question.levels].reverse();
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
@@ -291,19 +287,15 @@ function QuestionCard({
       </div>
 
       {/* Horizontal gauge */}
-      <div className="mb-2 flex justify-between text-xs font-semibold text-gray-400">
-        <span className="text-brand-600">5 · 매우 우수함</span>
-        <span className="text-gray-500">매우 부적합함 · 1</span>
+      <div className="mb-2 flex justify-between text-xs font-semibold">
+        <span className="whitespace-nowrap text-gray-500">1 · 매우 부적합함</span>
+        <span className="whitespace-nowrap text-brand-600">매우 우수함 · 5</span>
       </div>
       <div
         className="relative flex items-center justify-between px-1 py-3"
         onMouseLeave={() => setHovered(null)}
       >
         <div className="absolute left-1 right-1 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-gray-200" />
-        <div
-          className="absolute left-1 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-brand-400 transition-all duration-200"
-          style={{ width: `${fillPct}%`, maxWidth: "calc(100% - 8px)" }}
-        />
         {orderedLevels.map((level) => {
           const isSelected = selected === level.score;
           return (
@@ -324,10 +316,13 @@ function QuestionCard({
           );
         })}
       </div>
-      <div className="mb-8 flex justify-between text-[11px] text-gray-400 px-1">
+      <div className="mb-8 flex justify-between px-1">
         {orderedLevels.map((level) => (
-          <span key={level.score} className="w-10 text-center">
-            {level.label}
+          <span
+            key={level.score}
+            className="w-10 shrink-0 text-center text-[10px] text-gray-400"
+          >
+            {level.score}점
           </span>
         ))}
       </div>
