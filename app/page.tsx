@@ -92,15 +92,22 @@ export default function Page() {
           score: answers[q.id] ?? "",
         })),
       };
-      const res = await fetch("/api/submit", {
+      const webhookUrl = process.env.NEXT_PUBLIC_GAS_WEBHOOK_URL;
+      if (!webhookUrl) {
+        throw new Error(
+          "NEXT_PUBLIC_GAS_WEBHOOK_URL 환경변수가 설정되지 않았습니다. Vercel 환경변수를 확인해주세요."
+        );
+      }
+
+      // Apps Script 웹앱은 서버-서버(예: Vercel 서버리스 함수) 요청을 봇으로 오인해
+      // 차단하는 경우가 있어, 사용자의 브라우저에서 직접 전송한다.
+      // no-cors 모드에서는 응답 내용을 읽을 수 없으므로, 예외가 없으면 성공으로 간주한다.
+      await fetch(webhookUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.error || `제출 실패 (status ${res.status})`);
-      }
       setStep("done");
     } catch (e: any) {
       setError(e.message ?? "알 수 없는 오류가 발생했습니다.");

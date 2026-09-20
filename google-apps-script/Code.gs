@@ -9,7 +9,8 @@
  *    - 실행 계정: 나 (본인 구글 계정)
  *    - 액세스 권한: 전체 공개 (Anyone) — Vercel 서버가 호출할 수 있어야 함
  * 5) 배포 후 나오는 "웹 앱 URL"을 복사한다.
- * 6) Vercel 프로젝트의 환경변수 GAS_WEBHOOK_URL 에 그 URL을 붙여넣는다.
+ * 6) Vercel 프로젝트의 환경변수 NEXT_PUBLIC_GAS_WEBHOOK_URL 에 그 URL을 붙여넣는다.
+ *    (브라우저에서 직접 호출하므로 반드시 NEXT_PUBLIC_ 접두사가 붙어야 한다.)
  */
 
 function doPost(e) {
