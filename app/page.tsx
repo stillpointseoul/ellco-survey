@@ -9,6 +9,7 @@ export default function Page() {
   const [step, setStep] = useState<Step>("intro");
   const [intro, setIntro] = useState<Record<string, string>>({});
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [fromReview, setFromReview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,8 +37,14 @@ export default function Page() {
       return;
     }
     if (typeof step === "number") {
-      if (step + 1 < totalSteps) setStep(step + 1);
-      else setStep("review");
+      if (fromReview) {
+        setFromReview(false);
+        setStep("review");
+      } else if (step + 1 < totalSteps) {
+        setStep(step + 1);
+      } else {
+        setStep("review");
+      }
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
@@ -48,10 +55,27 @@ export default function Page() {
       return;
     }
     if (typeof step === "number") {
+      if (fromReview) {
+        setFromReview(false);
+        setStep("review");
+        return;
+      }
       if (step === 0) setStep("intro");
       else setStep(step - 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+  }
+
+  function jumpToQuestion(i: number) {
+    setFromReview(true);
+    setStep(i);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function backToReview() {
+    setFromReview(false);
+    setStep("review");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleSubmit() {
@@ -73,7 +97,10 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("제출 중 오류가 발생했습니다.");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || `제출 실패 (status ${res.status})`);
+      }
       setStep("done");
     } catch (e: any) {
       setError(e.message ?? "알 수 없는 오류가 발생했습니다.");
@@ -111,18 +138,20 @@ export default function Page() {
             onNext={goNext}
             onPrev={goPrev}
             isLast={step === totalSteps - 1}
+            fromReview={fromReview}
+            onBackToReview={backToReview}
           />
         )}
 
         {step === "review" && (
           <ReviewStep
-            answeredCount={answeredCount}
+            answers={answers}
             total={totalSteps}
             onPrev={goPrev}
             onSubmit={handleSubmit}
             submitting={submitting}
             error={error}
-            onJump={(i) => setStep(i)}
+            onJump={jumpToQuestion}
           />
         )}
 
@@ -214,6 +243,8 @@ function QuestionCard({
   onNext,
   onPrev,
   isLast,
+  fromReview,
+  onBackToReview,
 }: {
   question: (typeof QUESTIONS)[number];
   selected?: number;
@@ -221,14 +252,34 @@ function QuestionCard({
   onNext: () => void;
   onPrev: () => void;
   isLast: boolean;
+  fromReview: boolean;
+  onBackToReview: () => void;
 }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const displayScore = hovered ?? selected ?? null;
+  const displayLevel = question.levels.find((l) => l.score === displayScore) ?? null;
+  const orderedLevels = question.levels; // already 5,4,3,2,1
+  const selectedPos = selected
+    ? orderedLevels.findIndex((l) => l.score === selected)
+    : -1;
+  const fillPct =
+    selectedPos >= 0 ? (selectedPos / (orderedLevels.length - 1)) * 100 : 0;
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+      {fromReview && (
+        <button
+          onClick={onBackToReview}
+          className="mb-4 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
+        >
+          ← 검토 화면으로 돌아가기
+        </button>
+      )}
       <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">
         {question.section} · {question.no}번
       </p>
       <h2 className="text-xl font-bold text-gray-900 mb-3">{question.title}</h2>
-      <div className="flex flex-wrap gap-1.5 mb-6">
+      <div className="flex flex-wrap gap-1.5 mb-8">
         {question.criteria.map((c) => (
           <span
             key={c}
@@ -239,48 +290,72 @@ function QuestionCard({
         ))}
       </div>
 
-      <div className="flex flex-col gap-3">
-        {question.levels.map((level) => {
+      {/* Horizontal gauge */}
+      <div className="mb-2 flex justify-between text-xs font-semibold text-gray-400">
+        <span className="text-brand-600">5 · 매우 우수함</span>
+        <span className="text-gray-500">매우 부적합함 · 1</span>
+      </div>
+      <div
+        className="relative flex items-center justify-between px-1 py-3"
+        onMouseLeave={() => setHovered(null)}
+      >
+        <div className="absolute left-1 right-1 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-gray-200" />
+        <div
+          className="absolute left-1 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-brand-400 transition-all duration-200"
+          style={{ width: `${fillPct}%`, maxWidth: "calc(100% - 8px)" }}
+        />
+        {orderedLevels.map((level) => {
           const isSelected = selected === level.score;
           return (
             <button
               key={level.score}
+              onMouseEnter={() => setHovered(level.score)}
               onClick={() => onSelect(level.score)}
               className={[
-                "group text-left rounded-xl border-2 px-4 py-3.5 transition-all",
+                "relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold transition-all",
                 isSelected
-                  ? "border-brand-500 bg-brand-50 shadow-sm"
-                  : "border-gray-200 bg-white hover:border-brand-300 hover:bg-brand-50/40",
+                  ? "border-brand-500 bg-brand-500 text-white shadow-md scale-110"
+                  : "border-gray-300 bg-white text-gray-500 hover:border-brand-400 hover:text-brand-600",
               ].join(" ")}
+              aria-label={`${level.score}점 - ${level.label}`}
             >
-              <div className="flex items-center gap-3">
-                <span
-                  className={[
-                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition",
-                    isSelected
-                      ? "border-brand-500 bg-brand-500 text-white"
-                      : "border-gray-300 text-gray-400 group-hover:border-brand-400",
-                  ].join(" ")}
-                >
-                  {level.score}
-                </span>
-                <span
-                  className={[
-                    "text-sm font-semibold",
-                    isSelected ? "text-brand-700" : "text-gray-800",
-                  ].join(" ")}
-                >
-                  {level.label}
-                </span>
-              </div>
-              <ul className="mt-2 ml-9 list-disc space-y-1 text-[13px] leading-relaxed text-gray-600">
-                {level.points.map((p, i) => (
-                  <li key={i}>{p}</li>
-                ))}
-              </ul>
+              {level.score}
             </button>
           );
         })}
+      </div>
+      <div className="mb-8 flex justify-between text-[11px] text-gray-400 px-1">
+        {orderedLevels.map((level) => (
+          <span key={level.score} className="w-10 text-center">
+            {level.label}
+          </span>
+        ))}
+      </div>
+
+      {/* Detail panel for hovered/selected level */}
+      <div className="min-h-[220px] rounded-xl border-2 border-dashed border-gray-200 p-5">
+        {displayLevel ? (
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
+                {displayLevel.score}
+              </span>
+              <span className="text-sm font-bold text-gray-900">{displayLevel.label}</span>
+            </div>
+            <p className="mb-3 text-sm font-medium leading-relaxed text-gray-800">
+              {displayLevel.headline}
+            </p>
+            <ul className="list-disc space-y-1.5 pl-5 text-[13px] leading-relaxed text-gray-600">
+              {displayLevel.points.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="flex h-full min-h-[180px] items-center justify-center text-sm text-gray-400">
+            위 게이지에서 점수를 선택하거나 마우스를 올려 내용을 확인하세요.
+          </p>
+        )}
       </div>
 
       <div className="mt-8 flex items-center justify-between">
@@ -288,14 +363,14 @@ function QuestionCard({
           onClick={onPrev}
           className="rounded-lg px-5 py-2.5 text-sm font-semibold text-gray-500 transition hover:bg-gray-100"
         >
-          이전
+          {fromReview ? "검토 화면으로" : "이전"}
         </button>
         <button
           onClick={onNext}
           disabled={selected === undefined}
           className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
-          {isLast ? "검토하기" : "다음"}
+          {fromReview ? "저장하고 검토 화면으로" : isLast ? "검토하기" : "다음"}
         </button>
       </div>
     </div>
@@ -303,7 +378,7 @@ function QuestionCard({
 }
 
 function ReviewStep({
-  answeredCount,
+  answers,
   total,
   onPrev,
   onSubmit,
@@ -311,7 +386,7 @@ function ReviewStep({
   error,
   onJump,
 }: {
-  answeredCount: number;
+  answers: Record<string, number>;
   total: number;
   onPrev: () => void;
   onSubmit: () => void;
@@ -319,25 +394,50 @@ function ReviewStep({
   error: string | null;
   onJump: (i: number) => void;
 }) {
+  const answeredCount = Object.keys(answers).length;
   const complete = answeredCount === total;
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
       <h2 className="text-lg font-semibold text-gray-900 mb-1">제출 전 확인</h2>
       <p className="text-sm text-gray-500 mb-6">
-        총 {total}개 문항 중 {answeredCount}개를 응답했습니다.
+        총 {total}개 문항 중 {answeredCount}개를 응답했습니다. 문항을 클릭하면 수정할 수 있습니다.
       </p>
 
-      <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-6">
-        {QUESTIONS.map((q, i) => (
-          <button
-            key={q.id}
-            onClick={() => onJump(i)}
-            className="aspect-square rounded-md border border-gray-200 text-xs font-semibold text-gray-500 hover:border-brand-400 flex items-center justify-center"
-            title={q.title}
-          >
-            {q.no}
-          </button>
-        ))}
+      <div className="mb-6 flex flex-col divide-y divide-gray-100 rounded-xl border border-gray-200 overflow-hidden">
+        {QUESTIONS.map((q) => {
+          const done = answers[q.id] !== undefined;
+          return (
+            <button
+              key={q.id}
+              onClick={() => onJump(QUESTIONS.indexOf(q))}
+              className="flex items-center gap-3 px-4 py-3 text-left transition hover:bg-brand-50/60"
+            >
+              <span
+                className={[
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                  done ? "bg-brand-500 text-white" : "border-2 border-gray-300 text-gray-400",
+                ].join(" ")}
+              >
+                {done ? "✓" : q.no}
+              </span>
+              <span className="flex-1 truncate text-sm text-gray-800">
+                <span className="mr-2 text-xs font-semibold text-gray-400">{q.no}.</span>
+                {q.title}
+              </span>
+              {done && (
+                <span className="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-700">
+                  {answers[q.id]}점
+                </span>
+              )}
+              {!done && (
+                <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-500">
+                  미응답
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {error && (
