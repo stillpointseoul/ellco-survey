@@ -11,7 +11,15 @@
  * 5) 배포 후 나오는 "웹 앱 URL"을 복사한다.
  * 6) Vercel 프로젝트의 환경변수 NEXT_PUBLIC_GAS_WEBHOOK_URL 에 그 URL을 붙여넣는다.
  *    (브라우저에서 직접 호출하므로 반드시 NEXT_PUBLIC_ 접두사가 붙어야 한다.)
+ *
+ * 주의: 이 스크립트가 시트 메뉴 [확장 프로그램] > [Apps Script]가 아니라
+ * script.google.com에서 독립 프로젝트로 만들어졌다면 SpreadsheetApp.getActiveSpreadsheet()가
+ * 어떤 시트인지 알 수 없어 실패한다. 아래 SPREADSHEET_ID에 저장할 시트의 ID를 직접 넣어
+ * 어떤 방식으로 만들어졌든 항상 그 시트를 찾도록 한다.
+ * (시트 URL 예: https://docs.google.com/spreadsheets/d/이 부분이 ID/edit)
  */
+
+const SPREADSHEET_ID = "1fM2LvNVz9_uWA3oI2wMfDVEYvYNYYlLCHW7nFA98M9g";
 
 function doPost(e) {
   const lock = LockService.getScriptLock();
@@ -19,7 +27,7 @@ function doPost(e) {
 
   try {
     const data = JSON.parse(e.postData.contents);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = ss.getSheetByName("응답") || ss.insertSheet("응답");
 
     const introKeys = [
