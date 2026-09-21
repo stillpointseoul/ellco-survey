@@ -239,6 +239,12 @@ function IntroForm({
           설문 시작하기
         </button>
       </div>
+      <p className="mt-6 border-t border-gray-100 pt-4 text-[11px] leading-relaxed text-gray-400">
+        본 도구의 저작권은 Paul H. Brookes Publishing Co., Inc.에 있으며, 한국어판은
+        김명순·김길숙·임양미·이유진(2008)의 「만 3~5세 유아를 위한 교실 내 언어 및 문해환경
+        평가척도(ELLCO) 타당화 연구」에서 번안·타당화된 것으로, 저작권자의 허가 없는 복제·배포 및
+        무단 사용을 금합니다.
+      </p>
     </div>
   );
 }
