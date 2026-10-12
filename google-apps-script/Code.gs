@@ -21,12 +21,22 @@
 
 const SPREADSHEET_ID = "1fM2LvNVz9_uWA3oI2wMfDVEYvYNYYlLCHW7nFA98M9g";
 
+// 김명화 "유아 책 읽기태도 질문지" 전용 탭 (survey: "reading-attitude" 요청만 이 탭에 저장)
+const READING_ATTITUDE_SHEET = "김명화_책읽기태도";
+const READING_ATTITUDE_TEST_SHEET = "_TEST_책읽기태도";
+
 function doPost(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
   try {
     const data = JSON.parse(e.postData.contents);
+
+    // 신규 검사도구: 기존 ELLCO 로직을 거치지 않고 전용 탭에만 저장한다.
+    if (data && data.survey === "reading-attitude") {
+      return saveReadingAttitude_(data, READING_ATTITUDE_SHEET);
+    }
+
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = ss.getSheetByName("응답") || ss.insertSheet("응답");
 
@@ -83,4 +93,99 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ---------------------------------------------------------------------------
+// 김명화 "유아 책 읽기태도 질문지" 저장
+// 열: 제출 일시 | 기관명 | 검사일 | 성별 | 생년월일 | I_1~I_6 | II_1~II_6 | III_1~III_6
+//     | consent_future_use | consent_version  (동의 정보는 맨 끝 2열)
+// ---------------------------------------------------------------------------
+
+const READING_ATTITUDE_ITEM_IDS = [
+  "I_1", "I_2", "I_3", "I_4", "I_5", "I_6",
+  "II_1", "II_2", "II_3", "II_4", "II_5", "II_6",
+  "III_1", "III_2", "III_3", "III_4", "III_5", "III_6",
+];
+
+function saveReadingAttitude_(data, sheetName) {
+  const info = data.info || {};
+  const answers = data.answers || {};
+
+  // 18문항 모두 1~5 정수여야 저장한다 (잘못된 요청이 시트에 섞이지 않도록).
+  const scores = READING_ATTITUDE_ITEM_IDS.map(function (id) {
+    const n = Number(answers[id]);
+    if (!(n >= 1 && n <= 5 && Math.floor(n) === n)) {
+      throw new Error("Invalid answer for " + id);
+    }
+    return n;
+  });
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(
+      ["제출 일시", "기관명", "검사일", "성별", "생년월일"]
+        .concat(READING_ATTITUDE_ITEM_IDS)
+        .concat(["consent_future_use", "consent_version"])
+    );
+  }
+
+  const text = function (v) {
+    return String(v === undefined || v === null ? "" : v).trim().slice(0, 200);
+  };
+
+  const consent = data.consent || {};
+  const consentFutureUse =
+    consent.futureUse === true ? "agree" : consent.futureUse === false ? "disagree" : "";
+
+  const row = [
+    Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd HH:mm:ss"),
+    text(info.institution),
+    text(info.testDate),
+    text(info.gender),
+    text(info.birthDate),
+  ]
+    .concat(scores)
+    .concat([consentFutureUse, text(consent.version)]);
+
+  // 문자열 칸(기관명~생년월일, 동의 정보)은 "일반 텍스트"로 먼저 지정해, 입력값이 수식(=, + 등)으로
+  // 해석되거나 날짜 서식이 자동 변환되지 않고 입력한 그대로 저장되게 한다.
+  const targetRow = sheet.getLastRow() + 1;
+  const firstConsentCol = 5 + READING_ATTITUDE_ITEM_IDS.length + 1;
+  sheet.getRange(targetRow, 2, 1, 4).setNumberFormat("@");
+  sheet.getRange(targetRow, firstConsentCol, 1, 2).setNumberFormat("@");
+  sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
+
+  return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 테스트용 (Apps Script 편집기에서 직접 실행. 웹앱 URL로는 호출되지 않음)
+// 실제 데이터 탭이 아닌 "_TEST_책읽기태도" 탭에만 기록하며, 확인 후 아래 cleanup 함수로 삭제한다.
+// ---------------------------------------------------------------------------
+
+function testReadingAttitude_() {
+  const answers = {};
+  READING_ATTITUDE_ITEM_IDS.forEach(function (id, i) {
+    answers[id] = (i % 5) + 1;
+  });
+  const out = saveReadingAttitude_(
+    {
+      survey: "reading-attitude",
+      consent: { agreed: true, futureUse: true, version: "test" },
+      info: { institution: "테스트기관", testDate: "2026-01-01", gender: "남", birthDate: "2021-01-01" },
+      answers: answers,
+    },
+    READING_ATTITUDE_TEST_SHEET
+  );
+  Logger.log(out.getContent());
+}
+
+function cleanupReadingAttitudeTest_() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(READING_ATTITUDE_TEST_SHEET);
+  if (sheet) ss.deleteSheet(sheet);
 }
