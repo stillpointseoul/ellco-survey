@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import ReadingAttitudeSurvey from "./ReadingAttitudeSurvey";
 
 export const metadata: Metadata = {
-  title: "Concurrent Validity_survey 2 김명화",
+  title: "Concurrent Validity_survey 2",
   description: "유아 책 읽기태도 질문지",
 };
 
