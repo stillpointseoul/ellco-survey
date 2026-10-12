@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ELLCO Pre-K 언어 및 문해 환경 평가",
+  title: "Concurrent Validity_survey 1 엘코",
   description: "언어 및 문해 환경 평가 척도 (ELLCO Pre-K) 설문",
 };
 

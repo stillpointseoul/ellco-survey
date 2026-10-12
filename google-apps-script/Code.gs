@@ -259,7 +259,7 @@ function setupReadingAttitudeRoster() {
   const sheet = ss.insertSheet(READING_ATTITUDE_ROSTER_SHEET);
   sheet.appendRow(["코드", "표시이름", "유아 수", "완료 수", "링크"]);
 
-  const base = "https://ellco-survey.vercel.app/reading-attitude?c=";
+  const base = "https://concurrent-validity.vercel.app/survey-2?c=";
   [["이주은 선생님", 10], ["최민선 선생님", 19]].forEach(function (c) {
     const code = Utilities.getUuid().replace(/-/g, "").slice(0, 10);
     const r = sheet.getLastRow() + 1;
