@@ -101,8 +101,8 @@ function doPost(e) {
 // 학급 코드(?c=코드)로 접속 → "학급" 탭에서 표시이름·유아 수를 읽고, 유아 번호별 완료 여부를 관리한다.
 // 개인정보(이름·생년월일)는 받지 않고 유아 번호(1~유아 수)만 저장한다.
 //
-// 응답 탭 열: 제출 일시 | 학급코드 | 소속 기관명 | 평가일 | 담당 유아 연령 | 학급 유아 수 | 기관 소재 지역
-//             | 유아 명렬 번호 | I_1~I_6 | II_1~II_6 | III_1~III_6
+// 응답 탭 열: 제출 일시 | 학급코드 | 학급(표시이름) | 소속 기관명 | 평가일 | 담당 유아 연령 | 학급 유아 수
+//             | 기관 소재 지역 | 유아 명렬 번호 | I_1~I_6 | II_1~II_6 | III_1~III_6
 // ---------------------------------------------------------------------------
 
 const READING_ATTITUDE_ROSTER_SHEET = "학급";
@@ -114,7 +114,8 @@ const READING_ATTITUDE_ITEM_IDS = [
 ];
 
 const READING_ATTITUDE_HEADER = [
-  "제출 일시", "학급코드", "소속 기관명", "평가일", "담당 유아 연령", "학급 유아 수", "기관 소재 지역", "유아 명렬 번호",
+  "제출 일시", "학급코드", "학급(표시이름)", "소속 기관명", "평가일", "담당 유아 연령", "학급 유아 수",
+  "기관 소재 지역", "유아 명렬 번호",
 ].concat(READING_ATTITUDE_ITEM_IDS);
 
 function jsonOut_(obj) {
@@ -159,14 +160,14 @@ function readingAttitudeFindClass_(code) {
   return null;
 }
 
-// 응답 탭에서 해당 학급코드(B열)의 유아 명렬 번호(H열) 목록
+// 응답 탭에서 해당 학급코드(B열)의 유아 명렬 번호(I열) 목록
 function readingAttitudeDoneNumbers_(sheet, code) {
   if (!sheet || sheet.getLastRow() < 2) return [];
-  const rows = sheet.getRange(2, 2, sheet.getLastRow() - 1, 7).getValues();
+  const rows = sheet.getRange(2, 2, sheet.getLastRow() - 1, 8).getValues();
   const out = [];
   rows.forEach(function (r) {
     if (String(r[0]) === code) {
-      const n = Number(r[6]);
+      const n = Number(r[7]);
       if (n >= 1 && out.indexOf(n) === -1) out.push(n);
     }
   });
@@ -226,6 +227,7 @@ function saveReadingAttitude_(data, sheetName) {
   const row = [
     Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd HH:mm:ss"),
     classCode,
+    cls.label,
     text(info.institution),
     text(info.evalDate),
     text(info.childAge),
@@ -234,10 +236,10 @@ function saveReadingAttitude_(data, sheetName) {
     childNo,
   ].concat(scores);
 
-  // 문자열 칸(학급코드~기관 소재 지역: B~G열)은 "일반 텍스트"로 먼저 지정해, 입력값이 수식(=, + 등)으로
+  // 문자열 칸(학급코드~기관 소재 지역: B~H열)은 "일반 텍스트"로 먼저 지정해, 입력값이 수식(=, + 등)으로
   // 해석되거나 날짜 서식이 자동 변환되지 않고 입력한 그대로 저장되게 한다.
   const targetRow = sheet.getLastRow() + 1;
-  sheet.getRange(targetRow, 2, 1, 6).setNumberFormat("@");
+  sheet.getRange(targetRow, 2, 1, 7).setNumberFormat("@");
   sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
 
   return jsonOut_({ ok: true });
