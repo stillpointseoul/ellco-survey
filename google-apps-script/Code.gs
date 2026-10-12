@@ -96,10 +96,16 @@ function doPost(e) {
 }
 
 // ---------------------------------------------------------------------------
-// 김명화 "유아 책 읽기태도 질문지" 저장
-// 열: 제출 일시 | 기관명 | 검사일 | 성별 | 생년월일 | I_1~I_6 | II_1~II_6 | III_1~III_6
-//     | consent_future_use | consent_version  (동의 정보는 맨 끝 2열)
+// 김명화 "유아 책 읽기태도 질문지"
+//
+// 학급 코드(?c=코드)로 접속 → "학급" 탭에서 표시이름·유아 수를 읽고, 유아 번호별 완료 여부를 관리한다.
+// 개인정보(이름·생년월일)는 받지 않고 유아 번호(1~유아 수)만 저장한다.
+//
+// 응답 탭 열: 제출 일시 | 학급코드 | 기관명 | 검사일 | 성별 | 유아번호 | I_1~I_6 | II_1~II_6 | III_1~III_6
+//             | consent_future_use | consent_version
 // ---------------------------------------------------------------------------
+
+const READING_ATTITUDE_ROSTER_SHEET = "학급";
 
 const READING_ATTITUDE_ITEM_IDS = [
   "I_1", "I_2", "I_3", "I_4", "I_5", "I_6",
@@ -107,9 +113,78 @@ const READING_ATTITUDE_ITEM_IDS = [
   "III_1", "III_2", "III_3", "III_4", "III_5", "III_6",
 ];
 
+const READING_ATTITUDE_HEADER = ["제출 일시", "학급코드", "기관명", "검사일", "성별", "유아번호"]
+  .concat(READING_ATTITUDE_ITEM_IDS)
+  .concat(["consent_future_use", "consent_version"]);
+
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
+
+// 진행도 조회: GET ...?action=progress&c=학급코드 → { ok, label, size, done: [완료된 유아 번호들] }
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  if (p.action === "progress") {
+    const code = String(p.c || "").trim();
+    const cls = readingAttitudeFindClass_(code);
+    if (!cls) return jsonOut_({ ok: false, error: "unknown class" });
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(READING_ATTITUDE_SHEET);
+    return jsonOut_({
+      ok: true,
+      label: cls.label,
+      size: cls.size,
+      done: readingAttitudeDoneNumbers_(sheet, code),
+    });
+  }
+  return jsonOut_({ ok: false, error: "unknown action" });
+}
+
+function readingAttitudeFindClass_(code) {
+  if (!code) return null;
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(READING_ATTITUDE_ROSTER_SHEET);
+  if (!sheet || sheet.getLastRow() < 2) return null;
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim() === code) {
+      const size = Number(rows[i][2]);
+      if (!(size >= 1 && Math.floor(size) === size)) return null;
+      return { code: code, label: String(rows[i][1]), size: size };
+    }
+  }
+  return null;
+}
+
+// 응답 탭에서 해당 학급코드(B열)의 유아번호(F열) 목록
+function readingAttitudeDoneNumbers_(sheet, code) {
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const rows = sheet.getRange(2, 2, sheet.getLastRow() - 1, 5).getValues();
+  const out = [];
+  rows.forEach(function (r) {
+    if (String(r[0]) === code) {
+      const n = Number(r[4]);
+      if (n >= 1 && out.indexOf(n) === -1) out.push(n);
+    }
+  });
+  return out;
+}
+
 function saveReadingAttitude_(data, sheetName) {
   const info = data.info || {};
   const answers = data.answers || {};
+  const consent = data.consent || {};
+
+  const classCode = String(data.classCode || "").trim();
+  const cls = readingAttitudeFindClass_(classCode);
+  if (!cls) throw new Error("Unknown class code");
+
+  const childNo = Number(data.childNo);
+  if (!(childNo >= 1 && childNo <= cls.size && Math.floor(childNo) === childNo)) {
+    throw new Error("Invalid child number");
+  }
 
   // 18문항 모두 1~5 정수여야 저장한다 (잘못된 요청이 시트에 섞이지 않도록).
   const scores = READING_ATTITUDE_ITEM_IDS.map(function (id) {
@@ -121,53 +196,99 @@ function saveReadingAttitude_(data, sheetName) {
   });
 
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
+  let sheet = ss.getSheetByName(sheetName);
 
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(
-      ["제출 일시", "기관명", "검사일", "성별", "생년월일"]
-        .concat(READING_ATTITUDE_ITEM_IDS)
-        .concat(["consent_future_use", "consent_version"])
-    );
+  // 이전 열 구성의 탭이 이미 있으면 데이터를 보존하기 위해 이름만 바꿔 두고 새 탭을 만든다.
+  if (sheet && sheet.getLastRow() > 0) {
+    const current = sheet.getRange(1, 1, 1, READING_ATTITUDE_HEADER.length).getValues()[0];
+    const same = READING_ATTITUDE_HEADER.every(function (h, i) {
+      return String(current[i]) === h;
+    });
+    if (!same) {
+      sheet.setName(
+        sheetName + "_구버전_" + Utilities.formatDate(new Date(), "Asia/Seoul", "yyyyMMdd_HHmmss")
+      );
+      sheet = null;
+    }
+  }
+  if (!sheet) sheet = ss.insertSheet(sheetName);
+  if (sheet.getLastRow() === 0) sheet.appendRow(READING_ATTITUDE_HEADER);
+
+  // 같은 학급의 같은 번호가 이미 있으면 다시 저장하지 않는다 (중복 제출 방지).
+  if (readingAttitudeDoneNumbers_(sheet, classCode).indexOf(childNo) !== -1) {
+    return jsonOut_({ ok: true, duplicate: true });
   }
 
   const text = function (v) {
     return String(v === undefined || v === null ? "" : v).trim().slice(0, 200);
   };
-
-  const consent = data.consent || {};
   const consentFutureUse =
     consent.futureUse === true ? "agree" : consent.futureUse === false ? "disagree" : "";
 
   const row = [
     Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd HH:mm:ss"),
+    classCode,
     text(info.institution),
     text(info.testDate),
     text(info.gender),
-    text(info.birthDate),
+    childNo,
   ]
     .concat(scores)
     .concat([consentFutureUse, text(consent.version)]);
 
-  // 문자열 칸(기관명~생년월일, 동의 정보)은 "일반 텍스트"로 먼저 지정해, 입력값이 수식(=, + 등)으로
+  // 문자열 칸(학급코드~성별, 동의 정보)은 "일반 텍스트"로 먼저 지정해, 입력값이 수식(=, + 등)으로
   // 해석되거나 날짜 서식이 자동 변환되지 않고 입력한 그대로 저장되게 한다.
   const targetRow = sheet.getLastRow() + 1;
-  const firstConsentCol = 5 + READING_ATTITUDE_ITEM_IDS.length + 1;
+  const firstConsentCol = 6 + READING_ATTITUDE_ITEM_IDS.length + 1;
   sheet.getRange(targetRow, 2, 1, 4).setNumberFormat("@");
   sheet.getRange(targetRow, firstConsentCol, 1, 2).setNumberFormat("@");
   sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
 
-  return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(
-    ContentService.MimeType.JSON
-  );
+  return jsonOut_({ ok: true });
+}
+
+// ---------------------------------------------------------------------------
+// 학급 목록 탭 만들기 (편집기에서 1회 실행). 이미 "학급" 탭이 있으면 아무것도 하지 않는다.
+// 코드는 무작위로 생성되며, "링크" 열의 주소를 선생님께 전달한다.
+// 선생님을 추가하려면 "학급" 탭에 한 줄 추가: 코드(아무 영문/숫자 10자 내외) | 표시이름 | 유아 수
+// ---------------------------------------------------------------------------
+function setupReadingAttitudeRoster() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  if (ss.getSheetByName(READING_ATTITUDE_ROSTER_SHEET)) {
+    Logger.log("'학급' 탭이 이미 있어 아무것도 하지 않았습니다.");
+    return;
+  }
+  const sheet = ss.insertSheet(READING_ATTITUDE_ROSTER_SHEET);
+  sheet.appendRow(["코드", "표시이름", "유아 수", "완료 수", "링크"]);
+
+  const base = "https://ellco-survey.vercel.app/reading-attitude?c=";
+  [["이주은 선생님", 10], ["최민선 선생님", 19]].forEach(function (c) {
+    const code = Utilities.getUuid().replace(/-/g, "").slice(0, 10);
+    const r = sheet.getLastRow() + 1;
+    sheet.getRange(r, 1).setNumberFormat("@").setValue(code);
+    sheet.getRange(r, 2).setValue(c[0]);
+    sheet.getRange(r, 3).setValue(c[1]);
+    sheet
+      .getRange(r, 4)
+      .setFormula("=COUNTIF(INDIRECT(\"'" + READING_ATTITUDE_SHEET + "'!B:B\"),A" + r + ")");
+    sheet.getRange(r, 5).setFormula('="' + base + '"&A' + r);
+  });
 }
 
 // ---------------------------------------------------------------------------
 // 테스트용 (Apps Script 편집기에서 직접 실행. 웹앱 URL로는 호출되지 않음)
-// 실제 데이터 탭이 아닌 "_TEST_책읽기태도" 탭에만 기록하며, 확인 후 아래 cleanup 함수로 삭제한다.
+// 실제 데이터 탭이 아닌 "_TEST_책읽기태도" 탭에만 기록하며, 확인 후 cleanup 함수로 삭제한다.
+// 먼저 setupReadingAttitudeRoster()로 "학급" 탭이 있어야 한다.
 // ---------------------------------------------------------------------------
 
 function testReadingAttitude_() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const roster = ss.getSheetByName(READING_ATTITUDE_ROSTER_SHEET);
+  if (!roster || roster.getLastRow() < 2) {
+    throw new Error("'학급' 탭이 없습니다. 먼저 setupReadingAttitudeRoster를 실행하세요.");
+  }
+  const code = String(roster.getRange(2, 1).getValue()).trim();
+
   const answers = {};
   READING_ATTITUDE_ITEM_IDS.forEach(function (id, i) {
     answers[id] = (i % 5) + 1;
@@ -175,8 +296,10 @@ function testReadingAttitude_() {
   const out = saveReadingAttitude_(
     {
       survey: "reading-attitude",
+      classCode: code,
+      childNo: 1,
       consent: { agreed: true, futureUse: true, version: "test" },
-      info: { institution: "테스트기관", testDate: "2026-01-01", gender: "남", birthDate: "2021-01-01" },
+      info: { institution: "테스트기관", testDate: "2026-01-01", gender: "남" },
       answers: answers,
     },
     READING_ATTITUDE_TEST_SHEET
@@ -188,4 +311,13 @@ function cleanupReadingAttitudeTest_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(READING_ATTITUDE_TEST_SHEET);
   if (sheet) ss.deleteSheet(sheet);
+}
+
+// 편집기의 실행 목록에는 이름이 _로 끝나는 함수가 보이지 않으므로, 실행용 이름을 따로 둔다.
+function testReadingAttitude() {
+  testReadingAttitude_();
+}
+
+function cleanupReadingAttitudeTest() {
+  cleanupReadingAttitudeTest_();
 }
