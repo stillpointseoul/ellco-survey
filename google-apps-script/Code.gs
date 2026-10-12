@@ -123,11 +123,12 @@ function jsonOut_(obj) {
   );
 }
 
-// 진행도 조회: GET ...?action=progress&c=학급코드 → { ok, label, size, done: [완료된 유아 번호들] }
+// 진행도 조회: GET ...?action=progress&code=학급코드 → { ok, label, size, done: [완료된 유아 번호들] }
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.action === "progress") {
-    const code = String(p.c || "").trim();
+    // 파라미터 이름 "c"는 값이 영문일 때 구글이 400으로 막으므로 "code"를 쓴다.
+    const code = String(p.code || "").trim();
     const cls = readingAttitudeFindClass_(code);
     if (!cls) return jsonOut_({ ok: false, error: "unknown class" });
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);

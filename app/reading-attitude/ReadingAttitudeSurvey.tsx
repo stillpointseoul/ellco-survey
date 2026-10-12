@@ -77,7 +77,7 @@ export default function ReadingAttitudeSurvey({ classCode }: { classCode: string
     const webhookUrl = process.env.NEXT_PUBLIC_GAS_WEBHOOK_URL;
     if (!webhookUrl) throw new Error("config");
     const res = await fetch(
-      `${webhookUrl}?action=progress&c=${encodeURIComponent(classCode)}`,
+      `${webhookUrl}?action=progress&code=${encodeURIComponent(classCode)}`,
       { cache: "no-store" }
     );
     const data = await res.json();
