@@ -4,19 +4,31 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   ALL_ITEM_IDS,
-  GENDER_OPTIONS,
   READING_ATTITUDE_TITLE,
   SCALE,
   SECTIONS,
 } from "@/data/readingAttitude";
-import { CONSENT_VERSION } from "@/data/readingAttitudeConsent";
-import { ConsentEnded, ConsentScreen } from "./ReadingAttitudeConsent";
 
-type Info = { institution: string; testDate: string; gender: string };
+type Info = {
+  institution: string;
+  evalDate: string;
+  childAge: string;
+  classSize: string;
+  region: string;
+};
 type Progress = { label: string; size: number; done: number[] };
-type Stage = "loading" | "invalid" | "consent" | "ended" | "grid" | "form" | "done";
+type Stage = "loading" | "invalid" | "grid" | "form" | "done";
 
-const EMPTY_INFO: Info = { institution: "", testDate: "", gender: "" };
+const EMPTY_INFO: Info = { institution: "", evalDate: "", childAge: "", classSize: "", region: "" };
+
+const INFO_FIELDS: { key: keyof Info; label: string; placeholder: string }[] = [
+  { key: "institution", label: "소속 기관명", placeholder: "" },
+  { key: "evalDate", label: "평가일", placeholder: "예: 2026-10-13" },
+  { key: "childAge", label: "담당 유아 연령", placeholder: "예: 만 4세" },
+  { key: "classSize", label: "학급 유아 수", placeholder: "예: 10" },
+  { key: "region", label: "기관 소재 지역", placeholder: "예: 서울특별시 마포구" },
+];
+
 const TOTAL = ALL_ITEM_IDS.length;
 
 function scrollToId(id: string) {
@@ -88,7 +100,7 @@ export default function ReadingAttitudeSurvey({ classCode }: { classCode: string
       .then((p) => {
         if (cancelled) return;
         setProgress(p);
-        setStage("consent");
+        setStage("grid");
       })
       .catch((e: Error) => {
         if (cancelled) return;
@@ -125,7 +137,6 @@ export default function ReadingAttitudeSurvey({ classCode }: { classCode: string
   function openChild(no: number) {
     setChildNo(no);
     setAnswers({});
-    setInfo((prev) => ({ ...prev, gender: "" }));
     setShowMissing(false);
     setError(null);
     setStage("form");
@@ -182,11 +193,12 @@ export default function ReadingAttitudeSurvey({ classCode }: { classCode: string
         classCode,
         childNo,
         submittedAt: new Date().toISOString(),
-        consent: { agreed: true, futureUse: true, version: CONSENT_VERSION },
         info: {
           institution: info.institution.trim(),
-          testDate: info.testDate,
-          gender: info.gender,
+          evalDate: info.evalDate.trim(),
+          childAge: info.childAge.trim(),
+          classSize: info.classSize.trim(),
+          region: info.region.trim(),
         },
         answers,
       };
@@ -242,31 +254,6 @@ export default function ReadingAttitudeSurvey({ classCode }: { classCode: string
             다시 시도
           </button>
         </MessageCard>
-      </Shell>
-    );
-  }
-
-  if (stage === "consent") {
-    return (
-      <Shell label={progress?.label}>
-        <ConsentScreen
-          onAgree={() => {
-            setStage("grid");
-            window.scrollTo({ top: 0 });
-          }}
-          onDecline={() => {
-            setStage("ended");
-            window.scrollTo({ top: 0 });
-          }}
-        />
-      </Shell>
-    );
-  }
-
-  if (stage === "ended") {
-    return (
-      <Shell>
-        <ConsentEnded />
       </Shell>
     );
   }
@@ -403,62 +390,33 @@ export default function ReadingAttitudeSurvey({ classCode }: { classCode: string
       <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
         <h2 className="mb-5 text-base font-semibold text-gray-900">기본 정보</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div id="info-institution" className="flex flex-col gap-1.5 sm:col-span-2">
-            <label htmlFor="institution" className="text-sm font-medium text-gray-700">
-              기관명 (유치원/어린이집)
-            </label>
-            <input
-              id="institution"
-              type="text"
-              value={info.institution}
-              onChange={(e) => setInfo({ ...info, institution: e.target.value })}
-              className={inputClass("institution")}
-            />
-          </div>
-
-          <div id="info-testDate" className="flex flex-col gap-1.5">
-            <label htmlFor="testDate" className="text-sm font-medium text-gray-700">
-              검사일
-            </label>
-            <input
-              id="testDate"
-              type="date"
-              value={info.testDate}
-              onChange={(e) => setInfo({ ...info, testDate: e.target.value })}
-              className={inputClass("testDate")}
-            />
-          </div>
-
-          <div id="info-gender" className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-gray-700">성별</span>
+          {INFO_FIELDS.map((f) => (
             <div
-              role="radiogroup"
-              aria-label="성별"
+              key={f.key}
+              id={`info-${f.key}`}
               className={[
-                "grid grid-cols-2 gap-2 rounded-xl",
-                showMissing && !info.gender ? "ring-2 ring-red-200" : "",
+                "flex flex-col gap-1.5",
+                f.key === "institution" ? "sm:col-span-2" : "",
               ].join(" ")}
             >
-              {GENDER_OPTIONS.map((g) => {
-                const selected = info.gender === g;
-                return (
-                  <button
-                    key={g}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => setInfo({ ...info, gender: g })}
-                    className={[
-                      "rounded-lg border-2 py-2.5 text-sm font-semibold transition",
-                      selected
-                        ? "border-brand-500 bg-brand-50 text-brand-700"
-                        : "border-gray-200 bg-white text-gray-600 hover:border-brand-300 hover:bg-brand-50/40",
-                    ].join(" ")}
-                  >
-                    {g}
-                  </button>
-                );
-              })}
+              <label htmlFor={f.key} className="text-sm font-medium text-gray-700">
+                {f.label}
+              </label>
+              <input
+                id={f.key}
+                type="text"
+                value={info[f.key]}
+                placeholder={f.placeholder}
+                onChange={(e) => setInfo({ ...info, [f.key]: e.target.value })}
+                className={inputClass(f.key)}
+              />
+            </div>
+          ))}
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-gray-700">유아 명렬 번호</span>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-900">
+              {childNo}번
             </div>
           </div>
         </div>

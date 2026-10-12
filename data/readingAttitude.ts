@@ -67,4 +67,3 @@ export const SECTIONS: ReadingAttitudeSection[] = [
 
 export const ALL_ITEM_IDS: string[] = SECTIONS.flatMap((s) => s.items.map((i) => i.id));
 
-export const GENDER_OPTIONS = ["남", "여"] as const;

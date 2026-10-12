@@ -101,8 +101,8 @@ function doPost(e) {
 // 학급 코드(?c=코드)로 접속 → "학급" 탭에서 표시이름·유아 수를 읽고, 유아 번호별 완료 여부를 관리한다.
 // 개인정보(이름·생년월일)는 받지 않고 유아 번호(1~유아 수)만 저장한다.
 //
-// 응답 탭 열: 제출 일시 | 학급코드 | 기관명 | 검사일 | 성별 | 유아번호 | I_1~I_6 | II_1~II_6 | III_1~III_6
-//             | consent_future_use | consent_version
+// 응답 탭 열: 제출 일시 | 학급코드 | 소속 기관명 | 평가일 | 담당 유아 연령 | 학급 유아 수 | 기관 소재 지역
+//             | 유아 명렬 번호 | I_1~I_6 | II_1~II_6 | III_1~III_6
 // ---------------------------------------------------------------------------
 
 const READING_ATTITUDE_ROSTER_SHEET = "학급";
@@ -113,9 +113,9 @@ const READING_ATTITUDE_ITEM_IDS = [
   "III_1", "III_2", "III_3", "III_4", "III_5", "III_6",
 ];
 
-const READING_ATTITUDE_HEADER = ["제출 일시", "학급코드", "기관명", "검사일", "성별", "유아번호"]
-  .concat(READING_ATTITUDE_ITEM_IDS)
-  .concat(["consent_future_use", "consent_version"]);
+const READING_ATTITUDE_HEADER = [
+  "제출 일시", "학급코드", "소속 기관명", "평가일", "담당 유아 연령", "학급 유아 수", "기관 소재 지역", "유아 명렬 번호",
+].concat(READING_ATTITUDE_ITEM_IDS);
 
 function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
@@ -158,14 +158,14 @@ function readingAttitudeFindClass_(code) {
   return null;
 }
 
-// 응답 탭에서 해당 학급코드(B열)의 유아번호(F열) 목록
+// 응답 탭에서 해당 학급코드(B열)의 유아 명렬 번호(H열) 목록
 function readingAttitudeDoneNumbers_(sheet, code) {
   if (!sheet || sheet.getLastRow() < 2) return [];
-  const rows = sheet.getRange(2, 2, sheet.getLastRow() - 1, 5).getValues();
+  const rows = sheet.getRange(2, 2, sheet.getLastRow() - 1, 7).getValues();
   const out = [];
   rows.forEach(function (r) {
     if (String(r[0]) === code) {
-      const n = Number(r[4]);
+      const n = Number(r[6]);
       if (n >= 1 && out.indexOf(n) === -1) out.push(n);
     }
   });
@@ -175,7 +175,6 @@ function readingAttitudeDoneNumbers_(sheet, code) {
 function saveReadingAttitude_(data, sheetName) {
   const info = data.info || {};
   const answers = data.answers || {};
-  const consent = data.consent || {};
 
   const classCode = String(data.classCode || "").trim();
   const cls = readingAttitudeFindClass_(classCode);
@@ -222,26 +221,22 @@ function saveReadingAttitude_(data, sheetName) {
   const text = function (v) {
     return String(v === undefined || v === null ? "" : v).trim().slice(0, 200);
   };
-  const consentFutureUse =
-    consent.futureUse === true ? "agree" : consent.futureUse === false ? "disagree" : "";
 
   const row = [
     Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd HH:mm:ss"),
     classCode,
     text(info.institution),
-    text(info.testDate),
-    text(info.gender),
+    text(info.evalDate),
+    text(info.childAge),
+    text(info.classSize),
+    text(info.region),
     childNo,
-  ]
-    .concat(scores)
-    .concat([consentFutureUse, text(consent.version)]);
+  ].concat(scores);
 
-  // 문자열 칸(학급코드~성별, 동의 정보)은 "일반 텍스트"로 먼저 지정해, 입력값이 수식(=, + 등)으로
+  // 문자열 칸(학급코드~기관 소재 지역: B~G열)은 "일반 텍스트"로 먼저 지정해, 입력값이 수식(=, + 등)으로
   // 해석되거나 날짜 서식이 자동 변환되지 않고 입력한 그대로 저장되게 한다.
   const targetRow = sheet.getLastRow() + 1;
-  const firstConsentCol = 6 + READING_ATTITUDE_ITEM_IDS.length + 1;
-  sheet.getRange(targetRow, 2, 1, 4).setNumberFormat("@");
-  sheet.getRange(targetRow, firstConsentCol, 1, 2).setNumberFormat("@");
+  sheet.getRange(targetRow, 2, 1, 6).setNumberFormat("@");
   sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
 
   return jsonOut_({ ok: true });
@@ -298,8 +293,13 @@ function testReadingAttitude_() {
       survey: "reading-attitude",
       classCode: code,
       childNo: 1,
-      consent: { agreed: true, futureUse: true, version: "test" },
-      info: { institution: "테스트기관", testDate: "2026-01-01", gender: "남" },
+      info: {
+        institution: "테스트기관",
+        evalDate: "2026-01-01",
+        childAge: "만 4세",
+        classSize: "10",
+        region: "테스트지역",
+      },
       answers: answers,
     },
     READING_ATTITUDE_TEST_SHEET
