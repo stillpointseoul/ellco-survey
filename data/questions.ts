@@ -790,7 +790,7 @@ export const QUESTIONS: Question[] = [
 export const INTRO_FIELDS: { key: string; label: string; type: "text" | "date" | "number"; placeholder?: string }[] = [
   { key: "teacherName", label: "교사명", type: "text", placeholder: "예: 홍길동" },
   { key: "evalDate", label: "평가일", type: "date" },
-  { key: "institutionName", label: "기관명", type: "text", placeholder: "예: OO어린이집" },
+  { key: "institutionName", label: "기관명", type: "text", placeholder: "예: OO유치원, OO어린이집" },
   { key: "institutionType", label: "기관유형", type: "text", placeholder: "예: 국공립, 민간 등" },
   { key: "teacherCount", label: "교실 내 교사 수", type: "number", placeholder: "명" },
   { key: "otherAdultCount", label: "교실 내 교사 이외 성인 수", type: "number", placeholder: "명" },
