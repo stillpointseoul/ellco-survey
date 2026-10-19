@@ -74,12 +74,23 @@ function doPost(e) {
       for (let i = 0; i < questionCount; i++) {
         header.push((data.answers[i].no || i + 1) + "번");
       }
+      header.push("이메일");
       sheet.appendRow(header);
     }
 
     const row = [data.submittedAt || new Date().toISOString()];
     introKeys.forEach((k) => row.push((data.intro && data.intro[k]) || ""));
     (data.answers || []).forEach((a) => row.push(a.score));
+
+    // 이메일은 기존 열의 위치가 바뀌지 않도록 맨 끝 열에 추가한다.
+    row.push(String((data.intro && data.intro.email) || "").trim().slice(0, 200));
+    const emailCol = row.length;
+    if (sheet.getRange(1, emailCol).getValue() === "") {
+      sheet.getRange(1, emailCol).setValue("이메일"); // 이메일 열이 생기기 전에 만들어진 탭의 제목 칸 보충
+    }
+    // 이메일 칸은 "일반 텍스트"로 먼저 지정해 입력값이 수식으로 해석되지 않게 한다.
+    ensureRows_(sheet, sheet.getLastRow() + 1);
+    sheet.getRange(sheet.getLastRow() + 1, emailCol).setNumberFormat("@");
 
     sheet.appendRow(row);
 
@@ -102,7 +113,7 @@ function doPost(e) {
 // 개인정보(이름·생년월일)는 받지 않고 유아 번호(1~유아 수)만 저장한다.
 //
 // 응답 탭 열: 제출 일시 | 학급코드 | 학급(표시이름) | 소속 기관명 | 평가일 | 담당 유아 연령 | 학급 유아 수
-//             | 기관 소재 지역 | 유아 명렬 번호 | I_1~I_6 | II_1~II_6 | III_1~III_6
+//             | 기관 소재 지역 | 유아 명렬 번호 | I_1~I_6 | II_1~II_6 | III_1~III_6 | 이메일(맨 끝)
 // ---------------------------------------------------------------------------
 
 const READING_ATTITUDE_ROSTER_SHEET = "학급";
@@ -113,10 +124,18 @@ const READING_ATTITUDE_ITEM_IDS = [
   "III_1", "III_2", "III_3", "III_4", "III_5", "III_6",
 ];
 
-const READING_ATTITUDE_HEADER = [
+// 이미 만들어진 탭의 열 위치를 유지하기 위해, 기존 열(BASE)과 뒤에 덧붙인 열을 구분한다.
+const READING_ATTITUDE_BASE_HEADER = [
   "제출 일시", "학급코드", "학급(표시이름)", "소속 기관명", "평가일", "담당 유아 연령", "학급 유아 수",
   "기관 소재 지역", "유아 명렬 번호",
 ].concat(READING_ATTITUDE_ITEM_IDS);
+const READING_ATTITUDE_HEADER = READING_ATTITUDE_BASE_HEADER.concat(["이메일"]);
+
+// 시트의 남은 행이 모자라면(기본 1000행) 쓰기 전에 행을 늘려 저장 오류를 막는다.
+function ensureRows_(sheet, row) {
+  const max = sheet.getMaxRows();
+  if (row > max) sheet.insertRowsAfter(max, Math.max(100, row - max));
+}
 
 function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
@@ -201,8 +220,8 @@ function saveReadingAttitude_(data, sheetName) {
 
   // 이전 열 구성의 탭이 이미 있으면 데이터를 보존하기 위해 이름만 바꿔 두고 새 탭을 만든다.
   if (sheet && sheet.getLastRow() > 0) {
-    const current = sheet.getRange(1, 1, 1, READING_ATTITUDE_HEADER.length).getValues()[0];
-    const same = READING_ATTITUDE_HEADER.every(function (h, i) {
+    const current = sheet.getRange(1, 1, 1, READING_ATTITUDE_BASE_HEADER.length).getValues()[0];
+    const same = READING_ATTITUDE_BASE_HEADER.every(function (h, i) {
       return String(current[i]) === h;
     });
     if (!same) {
@@ -214,6 +233,11 @@ function saveReadingAttitude_(data, sheetName) {
   }
   if (!sheet) sheet = ss.insertSheet(sheetName);
   if (sheet.getLastRow() === 0) sheet.appendRow(READING_ATTITUDE_HEADER);
+  // 이메일 열이 생기기 전에 만들어진 탭에는 맨 끝 제목 칸만 보충한다 (기존 데이터는 그대로).
+  const emailCol = READING_ATTITUDE_HEADER.length;
+  if (sheet.getRange(1, emailCol).getValue() === "") {
+    sheet.getRange(1, emailCol).setValue("이메일");
+  }
 
   // 같은 학급의 같은 번호가 이미 있으면 다시 저장하지 않는다 (중복 제출 방지).
   if (readingAttitudeDoneNumbers_(sheet, classCode).indexOf(childNo) !== -1) {
@@ -234,12 +258,16 @@ function saveReadingAttitude_(data, sheetName) {
     text(info.classSize),
     text(info.region),
     childNo,
-  ].concat(scores);
+  ]
+    .concat(scores)
+    .concat([text(info.email)]);
 
   // 문자열 칸(학급코드~기관 소재 지역: B~H열)은 "일반 텍스트"로 먼저 지정해, 입력값이 수식(=, + 등)으로
   // 해석되거나 날짜 서식이 자동 변환되지 않고 입력한 그대로 저장되게 한다.
   const targetRow = sheet.getLastRow() + 1;
+  ensureRows_(sheet, targetRow);
   sheet.getRange(targetRow, 2, 1, 7).setNumberFormat("@");
+  sheet.getRange(targetRow, emailCol).setNumberFormat("@");
   sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
 
   return jsonOut_({ ok: true });
@@ -302,6 +330,7 @@ function testReadingAttitude_() {
         childAge: "만 4세",
         classSize: "10",
         region: "테스트지역",
+        email: "test@example.com",
       },
       answers: answers,
     },

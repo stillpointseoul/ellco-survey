@@ -15,11 +15,21 @@ type Info = {
   childAge: string;
   classSize: string;
   region: string;
+  email: string;
 };
 type Progress = { label: string; size: number; done: number[] };
 type Stage = "loading" | "invalid" | "grid" | "form" | "done";
 
-const EMPTY_INFO: Info = { institution: "", evalDate: "", childAge: "", classSize: "", region: "" };
+const EMPTY_INFO: Info = {
+  institution: "",
+  evalDate: "",
+  childAge: "",
+  classSize: "",
+  region: "",
+  email: "",
+};
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const INFO_FIELDS: { key: keyof Info; label: string; placeholder: string }[] = [
   { key: "institution", label: "소속 기관명", placeholder: "" },
@@ -27,6 +37,7 @@ const INFO_FIELDS: { key: keyof Info; label: string; placeholder: string }[] = [
   { key: "childAge", label: "담당 유아 연령", placeholder: "예: 만 4세" },
   { key: "classSize", label: "학급 유아 수", placeholder: "예: 10" },
   { key: "region", label: "기관 소재 지역", placeholder: "예: 서울특별시 마포구" },
+  { key: "email", label: "이메일", placeholder: "예: example@email.com" },
 ];
 
 const TOTAL = ALL_ITEM_IDS.length;
@@ -169,6 +180,11 @@ export default function ReadingAttitudeSurvey({ classCode }: { classCode: string
       scrollToId(missInfo.length > 0 ? `info-${missInfo[0]}` : `item-${missItems[0]}`);
       return;
     }
+    if (!EMAIL_RE.test(info.email.trim())) {
+      setError("이메일 형식을 확인해 주세요.");
+      scrollToId("info-email");
+      return;
+    }
 
     const webhookUrl = process.env.NEXT_PUBLIC_GAS_WEBHOOK_URL;
     if (!webhookUrl) {
@@ -199,6 +215,7 @@ export default function ReadingAttitudeSurvey({ classCode }: { classCode: string
           childAge: info.childAge.trim(),
           classSize: info.classSize.trim(),
           region: info.region.trim(),
+          email: info.email.trim(),
         },
         answers,
       };
@@ -396,7 +413,7 @@ export default function ReadingAttitudeSurvey({ classCode }: { classCode: string
               id={`info-${f.key}`}
               className={[
                 "flex flex-col gap-1.5",
-                f.key === "institution" ? "sm:col-span-2" : "",
+                f.key === "institution" || f.key === "email" ? "sm:col-span-2" : "",
               ].join(" ")}
             >
               <label htmlFor={f.key} className="text-sm font-medium text-gray-700">
@@ -404,12 +421,17 @@ export default function ReadingAttitudeSurvey({ classCode }: { classCode: string
               </label>
               <input
                 id={f.key}
-                type="text"
+                type={f.key === "email" ? "email" : "text"}
                 value={info[f.key]}
                 placeholder={f.placeholder}
                 onChange={(e) => setInfo({ ...info, [f.key]: e.target.value })}
                 className={inputClass(f.key)}
               />
+              {f.key === "email" &&
+                info.email.trim().length > 0 &&
+                !EMAIL_RE.test(info.email.trim()) && (
+                  <p className="text-xs text-red-500">이메일 형식을 확인해 주세요.</p>
+                )}
             </div>
           ))}
 

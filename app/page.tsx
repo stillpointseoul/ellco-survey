@@ -5,6 +5,8 @@ import { INTRO_FIELDS, QUESTIONS } from "@/data/questions";
 
 type Step = "intro" | number | "review" | "done";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function Page() {
   const [step, setStep] = useState<Step>("intro");
   const [intro, setIntro] = useState<Record<string, string>>({});
@@ -17,7 +19,11 @@ export default function Page() {
   const currentIndex = typeof step === "number" ? step : -1;
 
   const introComplete = useMemo(
-    () => INTRO_FIELDS.every((f) => (intro[f.key] ?? "").toString().trim().length > 0),
+    () =>
+      INTRO_FIELDS.every((f) => {
+        const v = (intro[f.key] ?? "").toString().trim();
+        return f.key === "email" ? EMAIL_RE.test(v) : v.length > 0;
+      }),
     [intro]
   );
 
@@ -227,6 +233,11 @@ function IntroForm({
               onChange={(e) => onChange(field.key, e.target.value)}
               className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             />
+            {field.key === "email" &&
+              (intro.email ?? "").trim().length > 0 &&
+              !EMAIL_RE.test((intro.email ?? "").trim()) && (
+                <p className="text-xs text-red-500">이메일 형식을 확인해 주세요.</p>
+              )}
           </div>
         ))}
       </div>
