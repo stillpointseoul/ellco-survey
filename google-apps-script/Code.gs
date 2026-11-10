@@ -21,11 +21,17 @@
 
 const SPREADSHEET_ID = "1fM2LvNVz9_uWA3oI2wMfDVEYvYNYYlLCHW7nFA98M9g";
 
+// 설문 종료 스위치: true면 응답 저장과 진행도 조회를 모두 막는다. (시트의 기존 데이터는 그대로 유지)
+// 다시 열려면 false로 바꿔 새 버전으로 배포한다.
+const SURVEYS_CLOSED = true;
+
 // 김명화 "유아 책 읽기태도 질문지" 전용 탭 (survey: "reading-attitude" 요청만 이 탭에 저장)
 const READING_ATTITUDE_SHEET = "김명화_책읽기태도";
 const READING_ATTITUDE_TEST_SHEET = "_TEST_책읽기태도";
 
 function doPost(e) {
+  if (SURVEYS_CLOSED) return jsonOut_({ ok: false, error: "closed" });
+
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
@@ -145,6 +151,7 @@ function jsonOut_(obj) {
 
 // 진행도 조회: GET ...?action=progress&code=학급코드 → { ok, label, size, done: [완료된 유아 번호들] }
 function doGet(e) {
+  if (SURVEYS_CLOSED) return jsonOut_({ ok: false, error: "closed" });
   const p = (e && e.parameter) || {};
   if (p.action === "progress") {
     // 파라미터 이름 "c"는 값이 영문일 때 구글이 400으로 막으므로 "code"를 쓴다.
